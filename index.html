@@ -3,31 +3,28 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>洗衣機管理系統</title>
+    <title>洗衣機總覽系統</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
-        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; width: 85%; max-width: 320px; }
-        #status-text { font-size: 1.6rem; font-weight: bold; color: #333; margin: 20px 0; }
-        button { width: 100%; padding: 14px; border: none; border-radius: 25px; font-size: 1rem; cursor: pointer; transition: 0.3s; margin-top: 10px; }
-        #btn-start { background-color: #28a745; color: white; }
-        #btn-finish { background-color: #dc3545; color: white; }
+        body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; padding: 20px; }
+        .card { background: white; padding: 1.5rem; border-radius: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 15px; text-align: center; }
+        #btn-report { position: fixed; top: 10px; right: 10px; background: #ffc107; border: none; padding: 8px 12px; border-radius: 5px; cursor: pointer; z-index: 1000; font-weight: bold; }
+        button { padding: 10px 20px; border: none; border-radius: 20px; cursor: pointer; margin-top: 10px; font-weight: bold; width: 100%; max-width: 200px; }
+        .btn-start { background: #28a745; color: white; }
+        .btn-finish { background: #dc3545; color: white; }
+        .timer { font-size: 1.4rem; font-weight: bold; color: #007bff; display: block; margin: 10px 0; }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <h1>洗衣機狀態</h1>
-        <div id="status-text">初始化中...</div>
-        <button id="btn-start">開始 47 分鐘洗衣</button>
-        <button id="btn-finish" style="display:none;">洗衣已完成，取衣</button>
-    </div>
+    <button id="btn-report">⚠️ 報修</button>
+    <h1>洗衣機即時狀態</h1>
+    <div id="machines-container">讀取中...</div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-        import { getFirestore, doc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
+        import { getFirestore, collection, onSnapshot, doc, updateDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
-        // --- 設定區 ---
         const firebaseConfig = {
             apiKey: "AIzaSyAHkaupQ8DwKdPWALIrpyYnbWC_zvih57Q",
             authDomain: "easy-wash-4a544.firebaseapp.com",
@@ -37,60 +34,71 @@
             appId: "1:268656008949:web:941ee518b3cd009a922fbc",
             measurementId: "G-GK0XHD4CVC"
         };
-        const LIFF_ID = "2010272935-AoPJx3l1"; // <--- 記得修改這裡
 
-        // --- 初始化 ---
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const docRef = doc(db, "washing_machines", "machine_01");
-        let timer = null;
+        let myUserId = "";
 
-        async function initApp() {
-            await liff.init({ liffId: LIFF_ID });
-            if (!liff.isLoggedIn()) {
-                liff.login();
-            }
-        }
-        initApp();
-
-        // --- 邏輯區 ---
-        onSnapshot(docRef, (doc) => {
-            const data = doc.data();
-            const btnStart = document.getElementById('btn-start');
-            const btnFinish = document.getElementById('btn-finish');
-            
-            if (data.status === "使用中") {
-                btnStart.style.display = "none";
-                btnFinish.style.display = "block";
-                startCountdown(data.endTime);
-            } else {
-                btnStart.style.display = "block";
-                btnFinish.style.display = "none";
-                document.getElementById('status-text').innerText = "目前空閒";
-                clearInterval(timer);
-            }
+        // 1. 初始化 LIFF
+        liff.init({ liffId: "2010272935-AoPJx3l1" }).then(() => {
+            if (liff.isLoggedIn()) myUserId = liff.getDecodedIDToken().sub;
         });
 
-        function startCountdown(endTime) {
-            clearInterval(timer);
-            timer = setInterval(() => {
+        // 2. 即時監聽與渲染
+        onSnapshot(collection(db, "washing_machines"), (snapshot) => {
+            const container = document.getElementById('machines-container');
+            container.innerHTML = "";
+            
+            snapshot.forEach((docSnap) => {
+                const data = docSnap.data();
+                const id = docSnap.id;
+                const isBusy = data.status === "使用中";
+                const isOwner = data.userId === myUserId;
+
+                const card = document.createElement('div');
+                card.className = "card";
+                card.innerHTML = `
+                    <h3>${id}</h3>
+                    <div id="status-${id}">
+                        ${isBusy ? `<span class="timer" data-end="${data.endTime}">計算中...</span>` : '目前空閒'}
+                    </div>
+                    ${!isBusy ? `<button class="btn-start" onclick="start('${id}')">開始 47 分鐘洗衣</button>` : ''}
+                    ${(isBusy && isOwner) ? `<button class="btn-finish" onclick="finish('${id}')">洗衣完成，取衣</button>` : ''}
+                `;
+                container.appendChild(card);
+            });
+        });
+
+        // 3. 倒數計時器循環 (每秒更新所有卡片)
+        setInterval(() => {
+            document.querySelectorAll('.timer').forEach(el => {
+                const endTime = parseInt(el.getAttribute('data-end'));
                 const distance = endTime - Date.now();
                 if (distance > 0) {
                     const mins = Math.floor(distance / (1000 * 60));
                     const secs = Math.floor((distance % (1000 * 60)) / 1000);
-                    document.getElementById('status-text').innerText = `剩餘: ${mins}:${secs.toString().padStart(2, '0')}`;
+                    el.innerText = `剩餘: ${mins}分 ${secs}秒`;
                 } else {
-                    document.getElementById('status-text').innerText = "洗衣完成！";
+                    el.innerText = "洗衣完成，請取衣！";
                 }
-            }, 1000);
-        }
+            });
+        }, 1000);
 
-        document.getElementById('btn-start').addEventListener('click', async () => {
-            await updateDoc(docRef, { status: "使用中", endTime: Date.now() + (47 * 60 * 1000) });
-        });
+        // 4. 按鈕操作函式
+        window.start = async (id) => {
+            await updateDoc(doc(db, "washing_machines", id), { 
+                status: "使用中", 
+                userId: myUserId, 
+                endTime: Date.now() + (47 * 60 * 1000) 
+            });
+        };
+        window.finish = async (id) => {
+            await updateDoc(doc(db, "washing_machines", id), { status: "空閒", userId: "" });
+        };
 
-        document.getElementById('btn-finish').addEventListener('click', async () => {
-            await updateDoc(docRef, { status: "空閒" });
+        // 5. 報修功能
+        document.getElementById('btn-report').addEventListener('click', () => {
+            liff.sendMessages([{ type: 'text', text: "⚠️ 故障回報：洗衣機設備出現異常，請管理員協助檢查。" }]);
         });
     </script>
 </body>
