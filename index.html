@@ -4,29 +4,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>洗衣機管理系統</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <style>
         body { font-family: 'Segoe UI', sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-        .card { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; width: 80%; max-width: 300px; }
-        #status-text { font-size: 1.5rem; font-weight: bold; color: #333; margin: 20px 0; }
-        button { width: 100%; padding: 12px; border: none; border-radius: 25px; font-size: 1rem; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+        .card { background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; width: 85%; max-width: 320px; }
+        #status-text { font-size: 1.6rem; font-weight: bold; color: #333; margin: 20px 0; }
+        button { width: 100%; padding: 14px; border: none; border-radius: 25px; font-size: 1rem; cursor: pointer; transition: 0.3s; margin-top: 10px; }
         #btn-start { background-color: #28a745; color: white; }
         #btn-finish { background-color: #dc3545; color: white; }
-        button:disabled { background-color: #ccc; cursor: not-allowed; }
     </style>
 </head>
 <body>
 
     <div class="card">
         <h1>洗衣機狀態</h1>
-        <div id="status-text">連線中...</div>
+        <div id="status-text">初始化中...</div>
         <button id="btn-start">開始 47 分鐘洗衣</button>
-        <button id="btn-finish" style="display:none;">洗衣已完成，我要取衣</button>
+        <button id="btn-finish" style="display:none;">洗衣已完成，取衣</button>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
         import { getFirestore, doc, onSnapshot, updateDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
 
+        // --- 設定區 ---
         const firebaseConfig = {
             apiKey: "AIzaSyAHkaupQ8DwKdPWALIrpyYnbWC_zvih57Q",
             authDomain: "easy-wash-4a544.firebaseapp.com",
@@ -36,14 +37,23 @@
             appId: "1:268656008949:web:941ee518b3cd009a922fbc",
             measurementId: "G-GK0XHD4CVC"
         };
+        const LIFF_ID = "2010272935-AoPJx3l1"; // <--- 記得修改這裡
 
+        // --- 初始化 ---
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const docRef = doc(db, "washing_machines", "machine_01");
-
         let timer = null;
 
-        // 監聽資料庫變化
+        async function initApp() {
+            await liff.init({ liffId: LIFF_ID });
+            if (!liff.isLoggedIn()) {
+                liff.login();
+            }
+        }
+        initApp();
+
+        // --- 邏輯區 ---
         onSnapshot(docRef, (doc) => {
             const data = doc.data();
             const btnStart = document.getElementById('btn-start');
@@ -61,7 +71,6 @@
             }
         });
 
-        // 倒數計時器
         function startCountdown(endTime) {
             clearInterval(timer);
             timer = setInterval(() => {
@@ -76,12 +85,10 @@
             }, 1000);
         }
 
-        // 開始洗衣邏輯
         document.getElementById('btn-start').addEventListener('click', async () => {
             await updateDoc(docRef, { status: "使用中", endTime: Date.now() + (47 * 60 * 1000) });
         });
 
-        // 完成取衣邏輯 (將狀態改回空閒)
         document.getElementById('btn-finish').addEventListener('click', async () => {
             await updateDoc(docRef, { status: "空閒" });
         });
