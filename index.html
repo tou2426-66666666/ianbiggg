@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>洗衣機管理系統</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+    <h1>洗衣機狀態查詢</h1>
+    <p id="user-name">載入中...</p>
+    <button id="btn-status">查詢洗衣機狀態</button>
+
+    <script>
+        async function main() {
+            // 初始化 LIFF
+            await liff.init({ liffId: "2010272583" });
+            
+            if (liff.isLoggedIn()) {
+                const profile = await liff.getProfile();
+                document.getElementById('user-name').innerText = "你好, " + profile.displayName;
+            } else {
+                liff.login();
+            }
+        }
+        main();
+    </script>
+</body>
+</html>
